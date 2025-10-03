@@ -1,0 +1,18 @@
+[Unit]
+Description=Command Voice Relay Control Service
+After=network.target mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/command-voice-relay
+ExecStart=/usr/bin/python3 /home/pi/command-voice-relay/app.py
+Restart=always
+RestartSec=5
+Environment=FLASK_DEBUG=False
+Environment=FLASK_HOST=0.0.0.0
+Environment=PORT=8000
+
+[Install]
+WantedBy=multi-user.target

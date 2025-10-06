@@ -46,6 +46,21 @@ class VoiceControl:
             "power off": "off"
         }
 
+        # Store last command result for UI display
+        self.last_command_result = {
+            'timestamp': None,
+            'command_text': '',
+            'recognized_text': '',
+            'action': '',
+            'object_name': '',
+            'device_found': False,
+            'device_name': '',
+            'pin': '',
+            'mqtt_success': False,
+            'error_message': '',
+            'success': False
+        }
+
     def load_configurations(self):
         """Load automation voice configurations"""
         try:
@@ -172,11 +187,29 @@ class VoiceControl:
         text_lower = text.lower().strip()
         log_simple(f"Processing voice command: '{text}'", "INFO")
 
+        # Reset last command result
+        self.last_command_result = {
+            'timestamp': datetime.now().isoformat(),
+            'command_text': text,
+            'recognized_text': text,
+            'action': '',
+            'object_name': '',
+            'device_found': False,
+            'device_name': '',
+            'pin': '',
+            'mqtt_success': False,
+            'error_message': '',
+            'success': False
+        }
+
         # Step 1: Analyze command - what action is being requested (on/off → boolean 1/0)
         action = self.analyze_command_action(text_lower)
         if not action:
             log_simple(f"No valid action found in command: {text}", "WARNING")
+            self.last_command_result['error_message'] = f"No valid action found in command: {text}"
             return False
+
+        self.last_command_result['action'] = action
 
         # Convert action to boolean data value
         data_value = 1 if action == "on" else 0
@@ -186,8 +219,10 @@ class VoiceControl:
         object_name = self.extract_object_name(text_lower, action)
         if not object_name:
             log_simple(f"Could not extract object name from: {text}", "WARNING")
+            self.last_command_result['error_message'] = f"Could not extract object name from: {text}"
             return False
 
+        self.last_command_result['object_name'] = object_name
         log_simple(f"Object extraction: '{object_name}'", "INFO")
 
         # Step 3: Find configuration using object_name as key
@@ -196,14 +231,29 @@ class VoiceControl:
             log_simple(f"No configuration found for object: '{object_name}'", "WARNING")
             available_devices = [c.get('object_name', '') for c in self.load_configurations() if c.get('object_name')]
             log_simple(f"Available objects: {', '.join(available_devices)}", "INFO")
+            self.last_command_result['error_message'] = f"No configuration found for object: '{object_name}'. Available: {', '.join(available_devices)}"
             return False
+
+        self.last_command_result['device_found'] = True
+        self.last_command_result['device_name'] = config.get('object_name') or config.get('device_name')
 
         # Step 4: Extract pin data from JSON configuration
         pin = config.get('pin', 1)
+        self.last_command_result['pin'] = pin
         log_simple(f"Configuration found: {config.get('object_name')} → pin {pin}", "INFO")
 
         # Step 5: Create MQTT payload and publish
-        return self.control_relay(config, action)
+        mqtt_success = self.control_relay(config, action)
+        self.last_command_result['mqtt_success'] = mqtt_success
+
+        if mqtt_success:
+            self.last_command_result['success'] = True
+            log_simple("Command executed successfully", "SUCCESS")
+        else:
+            self.last_command_result['error_message'] = "Failed to publish MQTT command"
+            log_simple("Command execution failed", "WARNING")
+
+        return mqtt_success
 
     def listen_for_commands(self):
         """Listen for voice commands"""
@@ -315,6 +365,10 @@ class VoiceControl:
         """Test voice command processing without MQTT"""
         log_simple(f"Testing voice command: {text}", "INFO")
         return self.process_voice_command(text)
+
+    def get_last_command_result(self):
+        """Get the result of the last processed command for UI display"""
+        return self.last_command_result.copy()
 
 def main():
     """Main function"""

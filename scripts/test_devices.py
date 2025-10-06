@@ -66,4 +66,4 @@ if __name__ == "__main__":
         print("You can now access the frontend at http://localhost:5000")
     else:
         print("❌ Failed to publish device data")
-        print("Make sure MQTT broker is running on localhost:1883")
+        print("Make sure MQTT broker is running on localhost:1884")

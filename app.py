@@ -290,10 +290,14 @@ def test_voice_command():
         # Test the command
         success = voice_control.test_voice_command(command_text)
 
+        # Get detailed result from voice control
+        result_details = voice_control.get_last_command_result()
+
         return jsonify({
             'status': 'success' if success else 'warning',
             'message': f'Command processed: {command_text}',
-            'success': success
+            'success': success,
+            'details': result_details
         })
 
     except Exception as e:
@@ -341,6 +345,30 @@ def discover_devices():
                 'message': 'AutomationVoice service not available'
             })
     except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        })
+
+@app.route('/api/voice/last-result')
+def get_last_voice_result():
+    """Get the last voice command result for UI display"""
+    try:
+        global voice_control
+        if voice_control is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Voice control not initialized'
+            })
+
+        result = voice_control.get_last_command_result()
+        return jsonify({
+            'status': 'success',
+            'result': result
+        })
+
+    except Exception as e:
+        log_simple(f"Error getting last voice result: {e}", "ERROR")
         return jsonify({
             'status': 'error',
             'message': str(e)

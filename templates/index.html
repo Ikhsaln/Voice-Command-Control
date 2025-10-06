@@ -8,6 +8,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+    <script>
+        // MQTT Configuration for Voice Control Relay System
+        const MQTT_CONFIG = {
+            broker: 'localhost',
+            port: 9001,  // Changed from 9000 to avoid conflict
+            websocketUrl: 'ws://localhost:9001/mqtt',
+            clientId: 'voice-control-frontend-' + Date.now()
+        };
+    </script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         .animate-in { animation: fadeIn 0.3s ease-in-out; }
@@ -53,15 +62,44 @@
     <div class="border-b bg-muted/30">
         <div class="container px-4 py-3">
             <div class="flex items-center gap-3">
+                <!-- Search Type Dropdown -->
+                <div class="relative">
+                    <i data-lucide="filter" class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
+                    <select
+                        id="searchTypeSelect"
+                        class="pl-10 h-10 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-200"
+                    >
+                        <option value="all">All Fields</option>
+                        <option value="object_name">Object Name</option>
+                        <option value="device_name">Device Name</option>
+                        <option value="part_number">Part Number</option>
+                        <option value="pin">PIN</option>
+                        <option value="description">Description</option>
+                        <option value="status">Status</option>
+                    </select>
+                </div>
+
+                <!-- Search Input -->
                 <div class="relative max-w-md">
                     <i data-lucide="search" class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"></i>
                     <input
                         id="searchInput"
                         type="text"
-                        placeholder="Search Device, PIN..."
+                        placeholder="Enter search term..."
                         class="pl-10 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-200"
                     />
                 </div>
+
+                <!-- Clear Search Button -->
+                <button
+                    id="clearSearchBtn"
+                    class="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
+                    title="Clear Search"
+                    style="display: none;"
+                >
+                    <i data-lucide="x" class="h-4 w-4"></i>
+                    Clear
+                </button>
             </div>
         </div>
     </div>
@@ -163,6 +201,139 @@
                 <i data-lucide="plus" class="h-4 w-4"></i>
                 New Configuration
             </button>
+        </div>
+
+        <!-- Voice Command Results Card -->
+        <div id="voiceResultsCard" class="bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/50 rounded-2xl border border-blue-200/60 shadow-xl shadow-blue-100/50 overflow-hidden mb-6 backdrop-blur-sm animate-in slide-in-from-bottom-4 duration-500" style="display: none;">
+            <!-- Header with clean black background -->
+            <div class="relative px-6 py-5 bg-black overflow-hidden">
+                <div class="relative flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <!-- Clean icon -->
+                        <div class="p-3 bg-white/10 rounded-xl border border-white/20">
+                            <i data-lucide="mic" class="h-6 w-6 text-white"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white tracking-tight">Voice Command Executed</h2>
+                            <p class="text-sm text-gray-300 font-medium">Real-time speech processing results</p>
+                        </div>
+                    </div>
+
+                    <!-- Status Badge -->
+                    <div id="commandStatusBadge" class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold border">
+                        <!-- Status will be set by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content with improved spacing and modern design -->
+            <div class="p-6 space-y-6">
+                <!-- Recognized Speech - Highlighted -->
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 bg-blue-100 rounded-lg">
+                            <i data-lucide="quote" class="h-4 w-4 text-blue-600"></i>
+                        </div>
+                        <label class="text-sm font-bold text-gray-700 uppercase tracking-wide">Recognized Speech</label>
+                    </div>
+                    <div class="relative p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border-2 border-blue-200/50 shadow-inner">
+                        <!-- Speech bubble effect -->
+                        <div class="absolute -top-2 left-6 w-0 h-0 border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-blue-50"></div>
+                        <p id="recognizedText" class="text-base text-gray-800 font-medium font-mono leading-relaxed">No speech recognized yet</p>
+                        <!-- Subtle animation -->
+                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer rounded-xl"></div>
+                    </div>
+                </div>
+
+                <!-- Command Analysis - Modern Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Action Card -->
+                    <div class="group relative overflow-hidden p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-xl border-2 border-emerald-200/60 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-emerald-100/50 rounded-full -mr-8 -mt-8"></div>
+                        <div class="relative flex items-center gap-3 mb-2">
+                            <div class="p-2 bg-emerald-100 rounded-lg group-hover:bg-emerald-200 transition-colors">
+                                <i data-lucide="zap" class="h-4 w-4 text-emerald-700"></i>
+                            </div>
+                            <label class="text-sm font-bold text-emerald-800 uppercase tracking-wide">Action</label>
+                        </div>
+                        <p id="detectedAction" class="text-lg font-bold text-emerald-900 capitalize">None</p>
+                    </div>
+
+                    <!-- Target Device Card -->
+                    <div class="group relative overflow-hidden p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border-2 border-purple-200/60 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-purple-100/50 rounded-full -mr-8 -mt-8"></div>
+                        <div class="relative flex items-center gap-3 mb-2">
+                            <div class="p-2 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                                <i data-lucide="target" class="h-4 w-4 text-purple-700"></i>
+                            </div>
+                            <label class="text-sm font-bold text-purple-800 uppercase tracking-wide">Target Device</label>
+                        </div>
+                        <p id="targetDevice" class="text-lg font-bold text-purple-900">None</p>
+                    </div>
+                </div>
+
+                <!-- Device Details - Enhanced -->
+                <div id="deviceDetailsSection" class="space-y-4" style="display: none;">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 bg-indigo-100 rounded-lg">
+                            <i data-lucide="cpu" class="h-4 w-4 text-indigo-600"></i>
+                        </div>
+                        <label class="text-sm font-bold text-gray-700 uppercase tracking-wide">Device Configuration</label>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Device Name -->
+                        <div class="relative p-4 bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl border-2 border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300">
+                            <div class="absolute top-2 right-2 w-2 h-2 bg-slate-400 rounded-full animate-pulse"></div>
+                            <div class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Device Name</div>
+                            <p id="deviceNameDetail" class="text-sm font-bold text-slate-900">-</p>
+                        </div>
+
+                        <!-- PIN -->
+                        <div class="relative p-4 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border-2 border-amber-200/60 shadow-sm hover:shadow-md transition-all duration-300">
+                            <div class="absolute top-2 right-2 w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
+                            <div class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">PIN</div>
+                            <code id="devicePinDetail" class="text-sm font-bold text-amber-900 bg-amber-100 px-2 py-1 rounded">-</code>
+                        </div>
+
+                        <!-- MQTT Status -->
+                        <div class="relative p-4 bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl border-2 border-cyan-200/60 shadow-sm hover:shadow-md transition-all duration-300">
+                            <div class="absolute top-2 right-2 w-2 h-2 bg-cyan-400 rounded-full animate-pulse"></div>
+                            <div class="text-xs font-bold text-cyan-700 uppercase tracking-wider mb-1">MQTT Status</div>
+                            <p id="mqttStatusDetail" class="text-sm font-bold text-cyan-900">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Message - Modern Alert -->
+                <div id="errorSection" class="space-y-3" style="display: none;">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 bg-red-100 rounded-lg">
+                            <i data-lucide="alert-triangle" class="h-4 w-4 text-red-600"></i>
+                        </div>
+                        <label class="text-sm font-bold text-red-700 uppercase tracking-wide">Error Details</label>
+                    </div>
+                    <div class="relative p-4 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl border-2 border-red-200/60 shadow-inner">
+                        <div class="absolute -top-2 left-6 w-0 h-0 border-l-8 border-r-8 border-b-8 border-l-transparent border-r-transparent border-b-red-50"></div>
+                        <p id="errorMessage" class="text-sm text-red-800 font-medium">-</p>
+                        <!-- Warning animation -->
+                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-red-100/30 to-transparent animate-shimmer rounded-xl"></div>
+                    </div>
+                </div>
+
+                <!-- Timestamp - Modern Footer -->
+                <div class="pt-4 border-t-2 border-gray-100/80">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div class="p-1.5 bg-gray-100 rounded-lg">
+                                <i data-lucide="clock" class="h-3 w-3 text-gray-600"></i>
+                            </div>
+                            <span class="text-xs text-gray-500 font-medium">Last updated</span>
+                        </div>
+                        <p id="commandTimestamp" class="text-xs text-gray-600 font-bold bg-gray-100 px-3 py-1 rounded-full">Never</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Main Data Table -->
@@ -630,6 +801,55 @@
 
             // Start periodic MQTT status updates
             setInterval(updateMqttStatus, 5000); // Check every 5 seconds
+
+            // Start periodic voice result updates (for real-time voice commands)
+            setInterval(updateVoiceResults, 1000); // Check every 1 second for faster updates
+        });
+
+        // Update voice results from backend (for real-time voice commands)
+        async function updateVoiceResults() {
+            try {
+                const response = await fetch('/api/voice/last-result');
+                const data = await response.json();
+
+                if (data.status === 'success' && data.result && data.result.command_text) {
+                    // Only update if there's actual command data (not empty result)
+                    const result = data.result;
+
+                    // Create a mock result object for the UI update function
+                    const mockResult = {
+                        success: result.success,
+                        status: result.success ? 'success' : 'warning',
+                        details: result
+                    };
+
+                    // Update the voice results card
+                    updateVoiceResultsCard(mockResult, result.command_text);
+
+                    console.log('Voice command result updated:', result); // Debug log
+                }
+            } catch (error) {
+                // Silently fail - don't spam console with polling errors
+                console.debug('Voice results polling:', error);
+            }
+        }
+
+        // Load initial data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAvailableDevices();
+            loadConfigurations();
+            updateStats();
+            setupSearchAndFilter();
+            setupKeyboardShortcuts();
+            setupModalHandlers();
+            setupVoiceControlHandlers();
+            setupRefreshHandler();
+
+            // Start periodic MQTT status updates
+            setInterval(updateMqttStatus, 5000); // Check every 5 seconds
+
+            // Start periodic voice result updates (for real-time voice commands)
+            setInterval(updateVoiceResults, 2000); // Check every 2 seconds
         });
 
         // Load available devices
@@ -1056,6 +1276,11 @@
                     document.getElementById('startVoiceBtn').style.display = 'inline-flex';
                     document.getElementById('stopVoiceBtn').style.display = 'none';
                     updateVoiceControlStatus('Inactive', 'gray');
+
+                    // Hide voice results card when stopping voice control
+                    const voiceResultsCard = document.getElementById('voiceResultsCard');
+                    voiceResultsCard.style.display = 'none';
+
                     showAlert('Voice control stopped', 'info');
                 } else {
                     showAlert(result.message || 'Failed to stop voice control', 'error');
@@ -1086,6 +1311,9 @@
             }
 
             try {
+                // Show loading state
+                showAlert('Processing voice command...', 'info');
+
                 const response = await fetch('/api/voice/test', {
                     method: 'POST',
                     headers: {
@@ -1096,6 +1324,10 @@
 
                 const result = await response.json();
 
+                // Update voice results card
+                updateVoiceResultsCard(result, command);
+
+                // Show appropriate alert
                 if (result.status === 'success') {
                     showAlert(`✅ Command processed successfully: "${command}"`, 'success');
                 } else {
@@ -1109,6 +1341,61 @@
                 console.error('Error testing voice command:', error);
                 showAlert('Error testing voice command', 'error');
             }
+        }
+
+        // Update voice results card with command details
+        function updateVoiceResultsCard(result, originalCommand) {
+            const card = document.getElementById('voiceResultsCard');
+            const details = result.details || {};
+
+            // Show the card
+            card.style.display = 'block';
+
+            // Update status badge
+            const statusBadge = document.getElementById('commandStatusBadge');
+            if (result.success || result.status === 'success') {
+                statusBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200';
+                statusBadge.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div><span>Success</span>';
+            } else {
+                statusBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200';
+                statusBadge.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-red-500"></div><span>Failed</span>';
+            }
+
+            // Update recognized text
+            document.getElementById('recognizedText').textContent = originalCommand;
+
+            // Update detected action
+            document.getElementById('detectedAction').textContent = details.action || 'None';
+
+            // Update target device
+            document.getElementById('targetDevice').textContent = details.object_name || 'None';
+
+            // Update device details section
+            const deviceSection = document.getElementById('deviceDetailsSection');
+            if (details.device_found) {
+                deviceSection.style.display = 'block';
+                document.getElementById('deviceNameDetail').textContent = details.device_name || '-';
+                document.getElementById('devicePinDetail').textContent = details.pin || '-';
+                document.getElementById('mqttStatusDetail').textContent = details.mqtt_success ? 'Success' : 'Failed';
+            } else {
+                deviceSection.style.display = 'none';
+            }
+
+            // Update error section
+            const errorSection = document.getElementById('errorSection');
+            if (details.error_message) {
+                errorSection.style.display = 'block';
+                document.getElementById('errorMessage').textContent = details.error_message;
+            } else {
+                errorSection.style.display = 'none';
+            }
+
+            // Update timestamp
+            const timestamp = details.timestamp ? new Date(details.timestamp).toLocaleString('id-ID') : new Date().toLocaleString('id-ID');
+            document.getElementById('commandTimestamp').textContent = `Last updated: ${timestamp}`;
+
+            // Scroll to results card
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         // Discover devices
@@ -1171,45 +1458,103 @@
                     let filteredData = data.data;
 
                     // Apply search filter
-                    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+                    const searchType = document.getElementById('searchTypeSelect').value;
+
                     if (searchTerm) {
-                        filteredData = filteredData.filter(config =>
-                            config.object_name?.toLowerCase().includes(searchTerm) ||
-                            config.device_name?.toLowerCase().includes(searchTerm) ||
-                            config.desc?.toLowerCase().includes(searchTerm)
-                        );
+                        filteredData = filteredData.filter(config => {
+                            switch (searchType) {
+                                case 'object_name':
+                                    return config.object_name?.toLowerCase().includes(searchTerm);
+                                case 'device_name':
+                                    return config.device_name?.toLowerCase().includes(searchTerm);
+                                case 'part_number':
+                                    return config.part_number?.toLowerCase().includes(searchTerm);
+                                case 'pin':
+                                    return config.pin?.toLowerCase().includes(searchTerm);
+                                case 'description':
+                                    return config.desc?.toLowerCase().includes(searchTerm);
+                                case 'status':
+                                    // For status search, check device status
+                                    const statusText = config.realStatus || 'unknown';
+                                    return statusText.toLowerCase().includes(searchTerm);
+                                case 'all':
+                                default:
+                                    return config.object_name?.toLowerCase().includes(searchTerm) ||
+                                           config.device_name?.toLowerCase().includes(searchTerm) ||
+                                           config.part_number?.toLowerCase().includes(searchTerm) ||
+                                           config.pin?.toLowerCase().includes(searchTerm) ||
+                                           config.desc?.toLowerCase().includes(searchTerm) ||
+                                           (config.realStatus || 'unknown').toLowerCase().includes(searchTerm);
+                            }
+                        });
                     }
 
-                    if (filteredData.length === 0) {
-                        tbody.innerHTML = `
-                            <tr>
-                                <td colspan="7" class="px-4 py-8 text-center text-muted-foreground">
-                                    <div class="flex flex-col items-center gap-2">
-                                        <i data-lucide="search" class="h-8 w-8"></i>
-                                        <p>No configurations found matching your criteria</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    } else {
-                        // Process configurations with real status
-                        const statusPromises = filteredData.map(config =>
-                            fetch(`/api/devices/status/${config.mac}`)
-                                .then(response => response.json())
-                                .then(data => ({
-                                    ...config,
-                                    realStatus: data.status === 'success' ? data.device_status : 'unknown'
-                                }))
-                                .catch(error => ({
-                                    ...config,
-                                    realStatus: 'unknown'
-                                }))
-                        );
+                    // Process configurations with real status first, then apply search filter
+                    const statusPromises = data.data.map(config =>
+                        fetch(`/api/devices/status/${config.mac}`)
+                            .then(response => response.json())
+                            .then(data => ({
+                                ...config,
+                                realStatus: data.status === 'success' ? data.device_status : 'unknown'
+                            }))
+                            .catch(error => ({
+                                ...config,
+                                realStatus: 'unknown'
+                            }))
+                    );
 
-                        Promise.all(statusPromises).then(configsWithStatus => {
-                            tbody.innerHTML = ''; // Clear loading state
+                    Promise.all(statusPromises).then(allConfigsWithStatus => {
+                        // Apply search filter after we have all status data
+                        let filteredData = allConfigsWithStatus;
 
-                            configsWithStatus.forEach((config, index) => {
+                        const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+                        const searchType = document.getElementById('searchTypeSelect').value;
+
+                        if (searchTerm) {
+                            filteredData = filteredData.filter(config => {
+                                switch (searchType) {
+                                    case 'object_name':
+                                        return config.object_name?.toLowerCase().includes(searchTerm);
+                                    case 'device_name':
+                                        return config.device_name?.toLowerCase().includes(searchTerm);
+                                    case 'part_number':
+                                        return config.part_number?.toLowerCase().includes(searchTerm);
+                                    case 'pin':
+                                        return config.pin?.toLowerCase().includes(searchTerm);
+                                    case 'description':
+                                        return config.desc?.toLowerCase().includes(searchTerm);
+                                    case 'status':
+                                        // For status search, check device status
+                                        const statusText = config.realStatus || 'unknown';
+                                        return statusText.toLowerCase().includes(searchTerm);
+                                    case 'all':
+                                    default:
+                                        return config.object_name?.toLowerCase().includes(searchTerm) ||
+                                               config.device_name?.toLowerCase().includes(searchTerm) ||
+                                               config.part_number?.toLowerCase().includes(searchTerm) ||
+                                               config.pin?.toLowerCase().includes(searchTerm) ||
+                                               config.desc?.toLowerCase().includes(searchTerm) ||
+                                               (config.realStatus || 'unknown').toLowerCase().includes(searchTerm);
+                                }
+                            });
+                        }
+
+                        tbody.innerHTML = ''; // Clear loading state
+
+                        if (filteredData.length === 0) {
+                            tbody.innerHTML = `
+                                <tr>
+                                    <td colspan="7" class="px-4 py-8 text-center text-muted-foreground">
+                                        <div class="flex flex-col items-center gap-2">
+                                            <i data-lucide="search" class="h-8 w-8"></i>
+                                            <p>No configurations found matching your criteria</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        } else {
+                            filteredData.forEach((config, index) => {
                                 let statusColor, statusText;
 
                                 switch (config.realStatus) {
@@ -1269,60 +1614,60 @@
                                 `;
                                 tbody.appendChild(row);
                             });
+                        }
 
-                            // Re-initialize Lucide icons for new elements
-                            lucide.createIcons();
-                        }).catch(error => {
-                            console.error('Error fetching device statuses:', error);
-                            // Fallback to unknown status
-                            tbody.innerHTML = '';
-                            filteredData.forEach((config, index) => {
-                                const row = document.createElement('tr');
-                                row.className = 'hover:bg-muted/30 transition-colors';
-                                row.innerHTML = `
-                                    <td class="px-6 py-4 text-center">
-                                        <span class="text-sm font-medium text-muted-foreground">${index + 1}</span>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="font-medium text-foreground">${config.object_name || '-'}</div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="space-y-1">
-                                            <div class="font-medium text-foreground">${config.device_name}</div>
-                                            <div class="text-xs text-muted-foreground">${config.part_number}</div>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">
-                                            <div class="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
-                                            <span>Unknown</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <code class="px-2 py-1 bg-muted/50 rounded text-xs font-mono text-foreground">${config.pin || '-'}</code>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="text-sm text-muted-foreground max-w-xs truncate" title="${config.desc || '-'}">${config.desc || '-'}</div>
-                                    </td>
-                                    <td class="px-6 py-4">
-                                        <div class="flex items-center justify-center gap-1">
-                                            <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border hover:bg-muted transition-colors" title="Preview Data">
-                                                <i data-lucide="eye" class="h-3.5 w-3.5 text-muted-foreground"></i>
-                                            </button>
-                                            <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border hover:bg-muted transition-colors" title="Edit" onclick="editConfiguration('${config.id}')">
-                                                <i data-lucide="edit-2" class="h-3.5 w-3.5 text-muted-foreground"></i>
-                                            </button>
-                                            <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 hover:border-destructive transition-colors" title="Delete" onclick="deleteConfiguration('${config.id}')">
-                                                <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                `;
-                                tbody.appendChild(row);
-                            });
-                            lucide.createIcons();
+                        // Re-initialize Lucide icons for new elements
+                        lucide.createIcons();
+                    }).catch(error => {
+                        console.error('Error fetching device statuses:', error);
+                        // Fallback: show all data without status
+                        tbody.innerHTML = '';
+                        data.data.forEach((config, index) => {
+                            const row = document.createElement('tr');
+                            row.className = 'hover:bg-muted/30 transition-colors';
+                            row.innerHTML = `
+                                <td class="px-6 py-4 text-center">
+                                    <span class="text-sm font-medium text-muted-foreground">${index + 1}</span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="font-medium text-foreground">${config.object_name || '-'}</div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="space-y-1">
+                                        <div class="font-medium text-foreground">${config.device_name}</div>
+                                        <div class="text-xs text-muted-foreground">${config.part_number}</div>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-yellow-500"></div>
+                                        <span>Unknown</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <code class="px-2 py-1 bg-muted/50 rounded text-xs font-mono text-foreground">${config.pin || '-'}</code>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="text-sm text-muted-foreground max-w-xs truncate" title="${config.desc || '-'}">${config.desc || '-'}</div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="flex items-center justify-center gap-1">
+                                        <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border hover:bg-muted transition-colors" title="Preview Data">
+                                            <i data-lucide="eye" class="h-3.5 w-3.5 text-muted-foreground"></i>
+                                        </button>
+                                        <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-border hover:bg-muted transition-colors" title="Edit" onclick="editConfiguration('${config.id}')">
+                                            <i data-lucide="edit-2" class="h-3.5 w-3.5 text-muted-foreground"></i>
+                                        </button>
+                                        <button class="inline-flex items-center justify-center h-8 w-8 rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 hover:border-destructive transition-colors" title="Delete" onclick="deleteConfiguration('${config.id}')">
+                                            <i data-lucide="trash-2" class="h-3.5 w-3.5"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            `;
+                            tbody.appendChild(row);
                         });
-                    }
+                        lucide.createIcons();
+                    });
                 } else {
                     tbody.innerHTML = `
                         <tr>

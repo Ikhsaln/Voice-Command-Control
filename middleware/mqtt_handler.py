@@ -16,7 +16,7 @@ class MQTTHandler:
     Manages connection, publishing, and subscribing to MQTT topics.
     """
 
-    def __init__(self, broker: str = "localhost", port: int = 1883, client_id: str = "voice_relay"):
+    def __init__(self, broker: str = "localhost", port: int = 1884, client_id: str = "voice_relay"):
         """
         Initialize MQTT client.
 
